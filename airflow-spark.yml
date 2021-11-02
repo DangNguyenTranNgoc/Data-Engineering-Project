@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spark-clu
+--- 
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-cluster
+  namespace: spark-clu
+spec:
+  selector:
+    app: spark-master
+  ports:
+  - name: webui
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+    nodePort: 30000
+  - name: master
+    protocol: TCP
+    port: 7077
+    targetPort: 7077
+  - name: master-rest
+    protocol: TCP
+    port: 6066
+    targetPort: 6066
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-master
+  namespace: spark-clu
+  labels:
+    app: spark-master
+spec:
+  selector:
+    matchLabels:
+      app: spark-master
+  template:
+    metadata:
+      labels:
+        app: spark-master
+    spec:
+      containers:
+      - name: spark-master
+        image: bde2020/spark-master:3.1.1-hadoop3.2
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        - containerPort: 7077
+        - containerPort: 6066
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: spark-worker
+  namespace: spark-clu
+  labels:
+    app: spark-worker
+spec:
+  selector:
+    matchLabels:
+      name: spark-worker
+  template:
+    metadata:
+      labels:
+        name: spark-worker
+    spec:
+      containers:
+      - name: spark-worker
+        image: bde2020/spark-worker:3.1.1-hadoop3.2
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8081       
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow
+  namespace: spark-clu
+  labels:
+    app: airflow
+spec:
+  selector:
+    matchLabels:
+      app: airflow
+  template:
+    metadata:
+      labels:
+        app: airflow
+    spec:
+      containers:
+      - name: airflow-c
+        image: greattenchu/centos-ariflowforcluster:1.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - mountPath: /root/airflow/dags
+          name: volume
+      volumes:
+        - name: volume
+          hostPath:
+            path: /.../.../airflow-spark/dags
+--- 
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-instance
+  namespace: spark-clu
+spec:
+  selector:
+    app: airflow
+  ports:
+  - name: webui
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+    nodePort: 30001
+  type: NodePort

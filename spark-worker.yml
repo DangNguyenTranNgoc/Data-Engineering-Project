@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: spark-worker
+  namespace: spark-clu
+  labels:
+    app: spark-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: spark-worker
+  template:
+    metadata:
+      labels:
+        name: spark-worker
+    spec:
+      containers:
+      - name: spark-worker
+        image: bde2020/spark-worker:3.1.1-hadoop3.2
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8081

@@ -133,3 +133,7 @@ dmypy.json
 # Ignore all local history of files
 .history
 .ionide
+
+### Ignore log folder and log file ###
+log/*
+*.log
