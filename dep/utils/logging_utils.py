@@ -8,7 +8,7 @@ import inspect
 import yaml
 from . import console_color
 
-LOG_DIR = "..\log"
+LOG_DIR = f"log"
 global VERBOSE
 VERBOSE = 5
 global TEST
@@ -111,7 +111,7 @@ def stop_logging():
         logging.root.removeHandler(handler)
 
 
-def start_logging(log_file_path=LOG_DIR, debug=True, loglevel=4, log_file_name="", module_name=None, rotating=False):
+def start_logging(log_file_path=LOG_DIR, debug=True, loglevel=3, log_file_name="", module_name=None, rotating=False):
     if loglevel < 0 or loglevel > 5 :
         loglevel = 4
     if log_file_path != "":
@@ -121,7 +121,7 @@ def start_logging(log_file_path=LOG_DIR, debug=True, loglevel=4, log_file_name="
             log_file_name = get_caller_name()
         if not rotating:
             str_time = time.strftime(r"%Y-%m-%d_%H%M%S", time.gmtime())
-            logfile = f"{log_file_path}/{log_file_name}_{str_time}.log"
+            logfile = f"{log_file_path}{os.sep}{log_file_name}_{str_time}.log"
             # set up logging to file
             logging.basicConfig(level=VERBOSE,
                                 format='%(asctime)s %(name)-35s %(levelname)-8s %(message)s',
