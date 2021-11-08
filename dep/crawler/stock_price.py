@@ -14,7 +14,6 @@ from ..utils import (
 )
 
 BASE_URL = r'https://www.cophieu68.vn/historyprice.php'
-LAST_INDEX = -1
 DATA_DIR = f"data{os.sep}stock"
 DATETIME_FORMAT = r"%d-%m-%Y"
 PAGE_NUMBER_FILTER = r'(currentPage=)([\d]+)'
@@ -26,8 +25,10 @@ MODULE_NAME = "stock_crawler.price"
 
 class StockPriceCrawler():
 
-    def __init__(self, logger):
+    def __init__(self, logger, base_url=BASE_URL):
         self.logger = logger
+        self.base_url = base_url
+
 
     def datetime_parser(self, date_str:str) -> datetime:
         """
@@ -99,20 +100,6 @@ class StockPriceCrawler():
         return date
 
 
-    def get_page_num_from_url(self, link:str) -> int:
-        """
-        Return page number from link 
-        Ex: https://www.cophieu68.vn/historyprice.php?currentPage=29&id=aaa => 29
-        """
-        try:
-            page_num = re.search(PAGE_NUMBER_FILTER, link)
-            if page_num is not None:
-                return int(page_num[2])
-        except Exception as ex:
-            self.logger.debug(ex)
-        return 0
-
-
     def crawl_page(self, link:str) -> list:
         """
         Crawl price from a page
@@ -131,30 +118,6 @@ class StockPriceCrawler():
         return price_list
 
 
-    def crawl_all(self, id:str) -> list:
-        """
-        Crawl all price from the first to the last page.
-        """
-        self.logger.info(f"Crawl all from url: {BASE_URL}?id={id}")
-        request = requests.get(f"{BASE_URL}?id={id}", verify=False)
-        soup = BeautifulSoup(request.content, from_encoding="utf-8")
-        price_content = soup.find('div', {'id':'content'})
-        last_page = price_content.ul.contents[-1].a.attrs['href']
-        # Parse current page
-        price_list = []
-        price_table = self.price_table_parser(price_content.table)
-        [price_list.append(record) for record in price_table]
-        page_num = self.get_page_num_from_url(last_page) + 1
-        # Parse to the last
-        for i in range(2, page_num):
-            url = "{}?currentPage={}&id={}".format(BASE_URL, i, id)
-            _price_list = self.crawl_page(url)
-            if _price_list is not None:
-                [price_list.append(record) for record in _price_list]
-        self.logger.info(f"Done! Crawl total {len(price_list)}")
-        return price_list
-
-
     def price_table_parser(self, price_table) -> list:
         """
         Parse price table to list
@@ -167,61 +130,12 @@ class StockPriceCrawler():
             if price_row is not None:
                 price_list.append(price_row)
         return price_list
-    
+
 
     def get_latest_date_db(self) -> datetime:
         """
         """
-        return datetime(2021, 3, 23)#23-03-2021
-
-
-    def __find_index_date(self, table:list, date:datetime):
-        if isinstance(table, list) and isinstance(table[0], list):
-            for idx, row in enumerate(table):
-                if date >= row[0]:
-                    return idx
-            return None
-    
-
-    def crawl_by_date(self, id:str):
-        """
-        Crawl data from the date to the latest date in wbesite
-        """
-        try:
-            date = self.get_latest_date_db()
-            logger.info(f"Crawl from url: {BASE_URL}?id={id} from date: {date.strftime(r'%Y-%m-%d')}")
-            request = requests.get(f"{BASE_URL}?id={id}", verify=False)
-            soup = BeautifulSoup(request.content, from_encoding="utf-8")
-            price_content = soup.find('div', {'id':'content'})
-            # Parse current page
-            price_list = []
-            price_table = self.price_table_parser(price_content.table)
-            [price_list.append(record) for record in price_table]
-            # Check if date is in list
-            idx = self.__find_index_date(price_list, date)
-            if idx is not None:
-                price_list = price_list[:idx]
-                return price_list
-            # Continue to the last page
-            last_page = price_content.ul.contents[-1].a.attrs['href']
-            page_num = self.get_page_num_from_url(last_page) + 1
-            # Parse to the last
-            for i in range(2, page_num):
-                url = "{}?currentPage={}&id={}".format(BASE_URL, i, id)
-                _price_list = self.crawl_page(url)
-                if _price_list is not None:
-                    idx = self.__find_index_date(_price_list, date)
-                    if idx is not None:
-                        _price_list = _price_list[:idx]
-                        [price_list.append(record) for record in _price_list]
-                        break
-                    # Date not existed in _price_list, add all to price_list
-                    [price_list.append(record) for record in _price_list]
-            self.logger.info(f"Done! Crawl total {len(price_list)}")
-            return price_list
-        except Exception as ex:
-            self.logger.debug(ex)
-        return None
+        return datetime(2021, 5, 23)#2021-05-20
 
 
     def export_to_csv(self, *, file_name:str, data:list, dest):
@@ -240,6 +154,108 @@ class StockPriceCrawler():
             self.logger.debug(ex)
 
 
+    def crawl_all(self, id:str, page:int=1, max_page:int=None, data:list=[]) -> list:
+        """
+        Crawl all data recursive
+        """
+        # Current page is not 1 and missing maximum page number
+        # It could lead to non-stop cycle
+        if max_page is None and page != 1:
+            self.logger.debug(f"Exception occur: Missing max page at page: {page}")
+            raise ValueError(f"Missing max page at page: {page}")
+        # Current page is 1 => find max page
+        if max_page is None and page == 1:
+            data = []
+            first_list, max_page = self.__crawl_first_page(id)
+            [data.append(row) for row in first_list]
+        # Parse page
+        url = f"{self.base_url}?currentPage={page}&id={id}"
+        prices = self.crawl_page(url)
+        [data.append(row) for row in prices]
+        # If at the last page => return
+        if page == max_page:
+            self.logger.info(f"Done! Crawl total {len(data)}")
+            return data
+        # Else (page 1 to n-1) => call to page + 1 with data loaded
+        return self.crawl_all(id, page+1, max_page, data)
+
+
+    def crawl_from_date(self, id:str, page:int=1, max_page:int=None, data:list=[]) -> list:
+        """
+        Crawl all data recursive from latest date to the date
+        """
+        if max_page is None and page != 1:
+            self.logger.debug(f"Exception occur: Missing max page at page: {page}")
+            raise ValueError(f"Missing max page at page: {page}")
+        date = self.get_latest_date_db()
+        if max_page is None and page == 1:
+            data = []
+            first_list, max_page = self.__crawl_first_page(id)
+            idx = self.__find_index_date(first_list, date)
+            if idx is not None:
+                self.logger.info(f"Done! Crawl total {len(data)}")
+                [data.append(row) for row in first_list[:idx]]
+                return data
+            [data.append(row) for row in first_list]
+        url = f"{self.base_url}?currentPage={page}&id={id}"
+        prices = self.crawl_page(url)
+        idx = self.__find_index_date(prices, date)
+        if idx is not None:
+            self.logger.info(f"Done! Crawl total {len(data)}")
+            [data.append(row) for row in prices[:idx]]
+            return data
+        if page == max_page:
+            self.logger.info(f"Done! Crawl total {len(data)}")
+            return data
+        return self.crawl_from_date(id, page+1, max_page, data)
+
+
+    def __get_price_table_from_url(self, url:str):
+        request = requests.get(url, verify=False)
+        soup = BeautifulSoup(request.content, from_encoding="utf-8")
+        price_content = soup.find('div', {'id':'content'})
+        if price_content is not None:
+            return price_content
+        return None
+    
+
+    def __crawl_first_page(self, id:str) -> tuple:
+        """
+        Crawling first page. Return data and last page number.
+        """
+        url = f"{self.base_url}?id={id}"
+        self.logger.info(f"Crawl the first page, url: {url}")
+        price_content = self.__get_price_table_from_url(url)
+        # Get the last page number
+        last_page = price_content.ul.contents[-1].a.attrs['href']
+        last_page_num = self.__get_page_num_from_url(last_page)
+        # Parse price table
+        price_table = self.price_table_parser(price_content.table)
+        return price_table, last_page_num
+    
+
+    def __find_index_date(self, table:list, date:datetime):
+        if isinstance(table, list) and isinstance(table[0], list):
+            for idx, row in enumerate(table):
+                if date >= row[0]:
+                    return idx
+            return None
+    
+
+    def __get_page_num_from_url(self, link:str) -> int:
+        """
+        Return page number from link 
+        Ex: https://www.cophieu68.vn/historyprice.php?currentPage=29&id=aaa => 29
+        """
+        try:
+            page_num = re.search(PAGE_NUMBER_FILTER, link)
+            if page_num is not None:
+                return int(page_num[2])
+        except Exception as ex:
+            self.logger.debug(ex)
+        return 0
+
+
 def argument_parser():
     """
     Add CLI argument parser
@@ -256,32 +272,33 @@ def argument_parser():
     return parser.parse_args()
 
 
-def main(args, log):
+def main(log):
     """
+    Main function for control
     """
+    args = argument_parser()
     stock_price_crawler = StockPriceCrawler(log)
     stock_id = args.stock_id.strip()
 
     if args.is_latest:
-        data = stock_price_crawler.crawl_by_date(id=stock_id)
+        data = stock_price_crawler.crawl_from_date(id=stock_id)
     else:
         data = stock_price_crawler.crawl_all(id=stock_id)
-    
+
     if args.data_dir:
         dest = args.data_dir
     else:
         dest = DATA_DIR
-    
+
     if args.file_name:
         file_name = args.file_name
     else:
         file_name = f"{stock_id}_stock_price.csv"
-    
-    stock_price_crawler.export_to_csv(file_name=file_name, data=data, dest=dest)
 
+    log.debug(data)
+    stock_price_crawler.export_to_csv(file_name=file_name, data=data, dest=dest)
 
 if __name__ == "__main__":
     logger = get_logger(MODULE_NAME)
     start_logging()
-    args = argument_parser()
-    main(args, logger)
+    main(logger)
