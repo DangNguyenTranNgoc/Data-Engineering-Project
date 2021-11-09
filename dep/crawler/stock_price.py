@@ -8,7 +8,7 @@ import re
 import argparse
 import os
 
-from ..utils import (
+from dep.utils import (
     get_logger,
     start_logging,
 )
@@ -23,8 +23,21 @@ PRICE_DF_HEADER = ["date", "ref_price", "diff_price", "diff_price_rat",
                 "lowest_price", "transaction", "foreign_buy", "foreign_sell"]
 MODULE_NAME = "stock_crawler.price"
 
-class StockPriceCrawler():
 
+class StockPriceCrawlerException(Exception):
+    """
+    Base class for errors in StockInfoCrawler
+    """
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
+
+class StockPriceCrawler:
+    """
+    Class stock price data crawler
+    """
     def __init__(self, logger, base_url=BASE_URL):
         self.logger = logger
         self.base_url = base_url
@@ -134,8 +147,9 @@ class StockPriceCrawler():
 
     def get_latest_date_db(self) -> datetime:
         """
+        Currently return a dummy date
         """
-        return datetime(2021, 5, 23)#2021-05-20
+        return datetime(2021, 5, 23)
 
 
     def export_to_csv(self, *, file_name:str, data:list, dest):
@@ -143,15 +157,16 @@ class StockPriceCrawler():
         Convert list to DataFrame then export to csv file at dest location
         """
         if not os.path.isdir(dest):
-            self.logger.debug(f"{dest} is not a directory!")
-            raise NotADirectoryError(f"{dest} is not a directory!")
+            self.logger.error(f"{dest} is not a directory!")
+            raise StockPriceCrawlerException(f"{dest} is not a directory!")
         self.logger.info(f"Write data to file {file_name} at {dest}")
         try:
             price_df = pd.DataFrame(data, columns=PRICE_DF_HEADER)
             price_df = price_df.sort_values(by='date')
             price_df.to_csv(f"{dest}{os.sep}{file_name}", index=False)
         except Exception as ex:
-            self.logger.debug(ex)
+            self.logger.error(ex)
+            raise ex
 
 
     def crawl_all(self, id:str, page:int=1, max_page:int=None, data:list=[]) -> list:
@@ -161,20 +176,21 @@ class StockPriceCrawler():
         # Current page is not 1 and missing maximum page number
         # It could lead to non-stop cycle
         if max_page is None and page != 1:
-            self.logger.debug(f"Exception occur: Missing max page at page: {page}")
-            raise ValueError(f"Missing max page at page: {page}")
+            self.logger.error(f"Exception occur: Missing max page at page: {page}")
+            raise StockPriceCrawlerException(f"Missing max page at page: {page}")
         # Current page is 1 => find max page
         if max_page is None and page == 1:
             data = []
             first_list, max_page = self.__crawl_first_page(id)
             [data.append(row) for row in first_list]
+            return self.crawl_all(id, page+1, max_page, data)
         # Parse page
         url = f"{self.base_url}?currentPage={page}&id={id}"
         prices = self.crawl_page(url)
         [data.append(row) for row in prices]
         # If at the last page => return
         if page == max_page:
-            self.logger.info(f"Done! Crawl total {len(data)}")
+            self.logger.info(f"Done! Crawl total {len(data)} row(s)")
             return data
         # Else (page 1 to n-1) => call to page + 1 with data loaded
         return self.crawl_all(id, page+1, max_page, data)
@@ -185,10 +201,11 @@ class StockPriceCrawler():
         Crawl all data recursive from latest date to the date
         """
         if max_page is None and page != 1:
-            self.logger.debug(f"Exception occur: Missing max page at page: {page}")
-            raise ValueError(f"Missing max page at page: {page}")
+            self.logger.error(f"Exception occur: Missing max page at page: {page}")
+            raise StockPriceCrawlerException(f"Missing max page at page: {page}")
         date = self.get_latest_date_db()
         if max_page is None and page == 1:
+            self.logger.info(f"Crawling from date {date.date()} to current date.")
             data = []
             first_list, max_page = self.__crawl_first_page(id)
             idx = self.__find_index_date(first_list, date)
@@ -197,6 +214,7 @@ class StockPriceCrawler():
                 [data.append(row) for row in first_list[:idx]]
                 return data
             [data.append(row) for row in first_list]
+            return self.crawl_from_date(id, page+1, max_page, data)
         url = f"{self.base_url}?currentPage={page}&id={id}"
         prices = self.crawl_page(url)
         idx = self.__find_index_date(prices, date)
@@ -205,7 +223,7 @@ class StockPriceCrawler():
             [data.append(row) for row in prices[:idx]]
             return data
         if page == max_page:
-            self.logger.info(f"Done! Crawl total {len(data)}")
+            self.logger.info(f"Done! Crawl total {len(data)} row(s)")
             return data
         return self.crawl_from_date(id, page+1, max_page, data)
 
@@ -224,7 +242,7 @@ class StockPriceCrawler():
         Crawling first page. Return data and last page number.
         """
         url = f"{self.base_url}?id={id}"
-        self.logger.info(f"Crawl the first page, url: {url}")
+        self.logger.info(f"Crawl the first page from url {url}")
         price_content = self.__get_price_table_from_url(url)
         # Get the last page number
         last_page = price_content.ul.contents[-1].a.attrs['href']
@@ -272,33 +290,39 @@ def argument_parser():
     return parser.parse_args()
 
 
-def main(log):
+def main():
     """
     Main function for control
     """
     args = argument_parser()
-    stock_price_crawler = StockPriceCrawler(log)
-    stock_id = args.stock_id.strip()
-
-    if args.is_latest:
-        data = stock_price_crawler.crawl_from_date(id=stock_id)
-    else:
-        data = stock_price_crawler.crawl_all(id=stock_id)
-
-    if args.data_dir:
-        dest = args.data_dir
-    else:
-        dest = DATA_DIR
-
-    if args.file_name:
-        file_name = args.file_name
-    else:
-        file_name = f"{stock_id}_stock_price.csv"
-
-    log.debug(data)
-    stock_price_crawler.export_to_csv(file_name=file_name, data=data, dest=dest)
-
-if __name__ == "__main__":
     logger = get_logger(MODULE_NAME)
     start_logging()
-    main(logger)
+    stock_price_crawler = StockPriceCrawler(logger)
+    stock_id = args.stock_id.strip()
+    try: 
+        if args.is_latest:
+            data = stock_price_crawler.crawl_from_date(id=stock_id)
+        else:
+            data = stock_price_crawler.crawl_all(id=stock_id)
+
+        if args.data_dir:
+            dest = args.data_dir
+        else:
+            dest = DATA_DIR
+
+        if args.file_name:
+            file_name = args.file_name
+        else:
+            file_name = f"{stock_id}_stock_price.csv"
+
+        stock_price_crawler.export_to_csv(file_name=file_name, data=data, dest=dest)
+    except KeyboardInterrupt:
+        logger.info("Runner exit manually (KeyboardInterrupt)")
+        return 0
+    except Exception as ex:
+        logger.debug(ex)
+        raise ex
+
+
+if __name__ == "__main__":
+    main()
