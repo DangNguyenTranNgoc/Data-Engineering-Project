@@ -18,7 +18,7 @@ IGNORNE_CHAR = ['\n']
 INFO_HEADER = ["code", "name", "first_trade_date", "first_vol", "publish_price", "current_vol", "treasury_shares", "publish_vol", "foreign_owner", "foreign_owner_ratio", "foreign_vol_remain", "current_price", "market_capital", "category", "exchanges"]
 DATA_DIR = f"data{os.sep}info"
 BASE_URL = r'https://www.cophieu68.vn/companylist.php'
-MODULE_NAME = 'stock_crawler.info'
+MODULE_NAME = 'dep.stock_crawler.info'
 
 
 class Exchange(Enum):

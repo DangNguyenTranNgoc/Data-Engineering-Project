@@ -19,3 +19,22 @@ CREATE TABLE IF NOT EXISTS public.stock_price
     CONSTRAINT stock_price_pkey PRIMARY KEY (id)
 )
 
+CREATE TABLE IF NOT EXISTS public.stock_info
+(
+    id integer NOT NULL DEFAULT nextval('stock_price_id_seq'::regclass),
+    code character(5)[] COLLATE pg_catalog."default" NOT NULL,
+    name character(255)[] COLLATE pg_catalog."default" NOT NULL
+    pub_date date NOT NULL,
+    first_vol real NOT NULL,
+    pub_price real NOT NULL,
+    curr_vol real NOT NULL,
+    treasury_shares real NOT NULL,
+    pub_vol real NOT NULL,
+    fr_owner real NOT NULL,
+    fr_owner_rat real NOT NULL,
+    fr_vol_remain real NOT NULL,
+    curr_price real NOT NULL,
+    market_capital real NOT NULL,
+    CONSTRAINT stock_info_pkey PRIMARY KEY (id)
+)
+

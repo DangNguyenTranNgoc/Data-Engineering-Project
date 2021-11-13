@@ -1,0 +1,13 @@
+stock-info: {}
+stock-price:
+  fox:
+  - date: 2021-11-13 23:00:55.243740
+    from-date: 2020-11-11
+    to-date: 2021-11-13
+    file-path: data\stock\fox_stock_price_2021-11-13_160052.csv
+    record-number: 151
+  - date: 2021-11-13 23:01:42.750515
+    from-date: 2020-11-11
+    to-date: 2021-11-13
+    file-path: data\stock\fox_stock_price_2021-11-13_160140.csv
+    record-number: 151

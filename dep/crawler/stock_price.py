@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import logging
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
@@ -18,10 +19,10 @@ DATA_DIR = f"data{os.sep}stock"
 DATETIME_FORMAT = r"%d-%m-%Y"
 PAGE_NUMBER_FILTER = r'(currentPage=)([\d]+)'
 CHARACTER_IGNORE = ['\n']
-PRICE_DF_HEADER = ["date", "ref_price", "diff_price", "diff_price_rat",
+PRICE_DF_HEADER = ["stock_code", "date", "ref_price", "diff_price", "diff_price_rat",
                 "close_price", "vol", "open_price", "highest_price",
                 "lowest_price", "transaction", "foreign_buy", "foreign_sell"]
-MODULE_NAME = "stock_crawler.price"
+MODULE_NAME = "dep.stock_crawler.price"
 
 
 class StockPriceCrawlerException(Exception):
@@ -30,6 +31,8 @@ class StockPriceCrawlerException(Exception):
     """
     def __init__(self, value):
         self.value = value
+
+
     def __str__(self):
         return repr(self.value)
 
@@ -38,9 +41,10 @@ class StockPriceCrawler:
     """
     Class stock price data crawler
     """
-    def __init__(self, logger, base_url=BASE_URL):
-        self.logger = logger
+    def __init__(self, stock_id:str, base_url=BASE_URL):
+        self.logger = logging.getLogger(MODULE_NAME)
         self.base_url = base_url
+        self.stock_id = stock_id
 
 
     def datetime_parser(self, date_str:str) -> datetime:
@@ -92,6 +96,8 @@ class StockPriceCrawler:
                     lowest_price, transaction, foreign_buy, foreign_sell]
             if record.count(None) == len(record):
                 record = None
+            else:
+                record.insert(0, self.stock_id)
         except AttributeError as error:
             self.logger.debug(error)
             record = None
@@ -136,20 +142,14 @@ class StockPriceCrawler:
         Parse price table to list
         """
         price_list = []
-        for row in price_table.contents:
-            if row in CHARACTER_IGNORE:
+        for idx, row in enumerate(price_table.contents):
+            # Ignore special character and header
+            if (row in CHARACTER_IGNORE) or (idx == 1):
                 continue
             price_row = self.record_parser(row)
             if price_row is not None:
                 price_list.append(price_row)
         return price_list
-
-
-    def get_latest_date_db(self) -> datetime:
-        """
-        Currently return a dummy date
-        """
-        return datetime(2021, 5, 23)
 
 
     def export_to_csv(self, *, file_name:str, data:list, dest):
@@ -169,7 +169,7 @@ class StockPriceCrawler:
             raise ex
 
 
-    def crawl_all(self, id:str, page:int=1, max_page:int=None, data:list=[]) -> list:
+    def crawl_all(self, page:int=1, max_page:int=None, data:list=[]) -> list:
         """
         Crawl all data recursive
         """
@@ -181,11 +181,11 @@ class StockPriceCrawler:
         # Current page is 1 => find max page
         if max_page is None and page == 1:
             data = []
-            first_list, max_page = self.__crawl_first_page(id)
+            first_list, max_page = self.__crawl_first_page()
             [data.append(row) for row in first_list]
-            return self.crawl_all(id, page+1, max_page, data)
+            return self.crawl_all(page+1, max_page, data)
         # Parse page
-        url = f"{self.base_url}?currentPage={page}&id={id}"
+        url = f"{self.base_url}?currentPage={page}&id={self.stock_id}"
         prices = self.crawl_page(url)
         [data.append(row) for row in prices]
         # If at the last page => return
@@ -193,39 +193,41 @@ class StockPriceCrawler:
             self.logger.info(f"Done! Crawl total {len(data)} row(s)")
             return data
         # Else (page 1 to n-1) => call to page + 1 with data loaded
-        return self.crawl_all(id, page+1, max_page, data)
+        return self.crawl_all(page+1, max_page, data)
 
 
-    def crawl_from_date(self, id:str, page:int=1, max_page:int=None, data:list=[]) -> list:
+    def crawl_from_date(self, from_date:datetime, page:int=1, max_page:int=None, data:list=[]) -> list:
         """
         Crawl all data recursive from latest date to the date
         """
         if max_page is None and page != 1:
-            self.logger.error(f"Exception occur: Missing max page at page: {page}")
             raise StockPriceCrawlerException(f"Missing max page at page: {page}")
-        date = self.get_latest_date_db()
+        if not isinstance(from_date, datetime):
+            raise StockPriceCrawlerException(f"Expected 'datetime', recieve '{type(from_date)}'")
+        if from_date > datetime.today():
+            raise StockPriceCrawlerException(f"Input date ({from_date}) is greater than today")
         if max_page is None and page == 1:
-            self.logger.info(f"Crawling from date {date.date()} to current date.")
+            self.logger.info(f"Crawling from date {from_date.date()} to current date.")
             data = []
-            first_list, max_page = self.__crawl_first_page(id)
-            idx = self.__find_index_date(first_list, date)
+            first_list, max_page = self.__crawl_first_page()
+            idx = self.__find_index_date(first_list, from_date)
             if idx is not None:
-                self.logger.info(f"Done! Crawl total {len(data)}")
                 [data.append(row) for row in first_list[:idx]]
+                self.logger.info(f"Done! Crawl total {len(data)} row(s)")
                 return data
             [data.append(row) for row in first_list]
-            return self.crawl_from_date(id, page+1, max_page, data)
-        url = f"{self.base_url}?currentPage={page}&id={id}"
+            return self.crawl_from_date(from_date, page+1, max_page, data)
+        url = f"{self.base_url}?currentPage={page}&id={self.stock_id}"
         prices = self.crawl_page(url)
-        idx = self.__find_index_date(prices, date)
+        idx = self.__find_index_date(prices, from_date)
         if idx is not None:
-            self.logger.info(f"Done! Crawl total {len(data)}")
             [data.append(row) for row in prices[:idx]]
+            self.logger.info(f"Done! Crawl total {len(data)} row(s)")
             return data
         if page == max_page:
             self.logger.info(f"Done! Crawl total {len(data)} row(s)")
             return data
-        return self.crawl_from_date(id, page+1, max_page, data)
+        return self.crawl_from_date(from_date, page+1, max_page, data)
 
 
     def __get_price_table_from_url(self, url:str):
@@ -237,11 +239,11 @@ class StockPriceCrawler:
         return None
     
 
-    def __crawl_first_page(self, id:str) -> tuple:
+    def __crawl_first_page(self) -> tuple:
         """
         Crawling first page. Return data and last page number.
         """
-        url = f"{self.base_url}?id={id}"
+        url = f"{self.base_url}?id={self.stock_id}"
         self.logger.info(f"Crawl the first page from url {url}")
         price_content = self.__get_price_table_from_url(url)
         # Get the last page number
@@ -252,14 +254,14 @@ class StockPriceCrawler:
         return price_table, last_page_num
     
 
-    def __find_index_date(self, table:list, date:datetime):
-        if isinstance(table, list) and isinstance(table[0], list):
+    def __find_index_date(self, table:list, from_date:datetime):
+        if isinstance(table, list) and isinstance(table[0], list) and isinstance(from_date, datetime):
             for idx, row in enumerate(table):
-                if date >= row[0]:
+                if isinstance(row[1], datetime) and (from_date >= row[1]):
                     return idx
-            return None
+        return None
+        
     
-
     def __get_page_num_from_url(self, link:str) -> int:
         """
         Return page number from link 
@@ -274,6 +276,18 @@ class StockPriceCrawler:
         return 0
 
 
+def dateType(arg:str):
+    """
+    Custom date type for argeparser
+    """
+    try:
+        from_date = datetime.strptime(arg, DATETIME_FORMAT)
+        return from_date
+    except ValueError as ex:
+        raise StockPriceCrawlerException(f"Invalid date! Expected 'dd-mm-yyyy', recieved '{arg}'")
+
+
+
 def argument_parser():
     """
     Add CLI argument parser
@@ -283,8 +297,9 @@ def argument_parser():
                         dest='stock_id', required=True, help='The id of the stock')
     parser.add_argument("-d", "--data-dir", action='store', type=str, default=DATA_DIR,
                         dest='data_dir', required=False, help='The location store data')
-    parser.add_argument("-l", "--latest", action='store_true',
-                        dest='is_latest', required=False, help='Is crawl from the latest date in DB?')
+    parser.add_argument("--from-date", action='store', type=dateType, dest='from_date',
+                        required=False, 
+                        help='Crawl from this date to the latest date. Format: "15-09-2021"',)
     parser.add_argument("-f", "--file-name", action='store', type=str,
                         dest='file_name', required=False, help='The name of the exported data file')
     return parser.parse_args()
@@ -297,13 +312,13 @@ def main():
     args = argument_parser()
     logger = get_logger(MODULE_NAME)
     start_logging()
-    stock_price_crawler = StockPriceCrawler(logger)
     stock_id = args.stock_id.strip()
-    try: 
-        if args.is_latest:
-            data = stock_price_crawler.crawl_from_date(id=stock_id)
+    stock_price_crawler = StockPriceCrawler(logger, stock_id)
+    try:
+        if args.from_date:
+            data = stock_price_crawler.crawl_from_date(from_date=args.from_date)
         else:
-            data = stock_price_crawler.crawl_all(id=stock_id)
+            data = stock_price_crawler.crawl_all()
 
         if args.data_dir:
             dest = args.data_dir
