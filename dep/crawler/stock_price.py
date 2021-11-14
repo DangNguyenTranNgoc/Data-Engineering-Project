@@ -19,7 +19,7 @@ DATA_DIR = f"data{os.sep}stock"
 DATETIME_FORMAT = r"%d-%m-%Y"
 PAGE_NUMBER_FILTER = r'(currentPage=)([\d]+)'
 CHARACTER_IGNORE = ['\n']
-PRICE_DF_HEADER = ["stock_code", "date", "ref_price", "diff_price", "diff_price_rat",
+PRICE_DF_HEADER = ["code", "date", "ref_price", "diff_price", "diff_price_rat",
                 "close_price", "vol", "open_price", "highest_price",
                 "lowest_price", "transaction", "foreign_buy", "foreign_sell"]
 MODULE_NAME = "dep.stock_crawler.price"
@@ -102,6 +102,7 @@ class StockPriceCrawler:
             self.logger.debug(error)
             record = None
         except IndexError as error:
+            #self.logger.debug(f"IndexError: list index out of range")
             self.logger.debug(error)
             record = None
         return record

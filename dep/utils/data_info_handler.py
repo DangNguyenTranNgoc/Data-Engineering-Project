@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import os
-from time import sleep
 import yaml
 import logging
 import tempfile
@@ -97,7 +96,7 @@ class DataInfoHandler():
                 self.log.verbose(f"Load metadata at {self.__file}.")
                 with open(self.__file, "r") as file:
                     metadata = yaml.safe_load(file)
-                self.__is_valid_structure(metadata)
+                self.__validate_metadata(metadata)
             except Exception as ex:
                 self.log.error(f"Exception occur: {ex}")
                 raise ex
@@ -108,25 +107,31 @@ class DataInfoHandler():
         return metadata
 
 
-    def get_first_record(self, type:MetaDataType, stock_id:str) -> dict:
+    def get_first_record(self, metadata_type:MetaDataType, stock_id:str) -> dict:
         """
         Get the first record (the first item) of a stock id.
         If stock is not existed, return None
         """
-        if not stock_id in self.metadata[type]:
+        if not isinstance(metadata_type, MetaDataType):
+            raise DataInfoTypeException(MetaDataType, type(metadata_type))
+        if not stock_id in self.metadata[metadata_type.value]:
             return None
-        return self.metadata[type][stock_id][0]
+        self.log.verbose(f"Get the first record of '{stock_id}', type '{metadata_type.value}'")
+        return self.metadata[metadata_type.value][stock_id][0]
 
 
-    def pop_record(self, type:MetaDataType, stock_id:str) -> dict:
+    def pop_record(self, metadata_type:MetaDataType, stock_id:str) -> dict:
         """
         Return the first record (the first item) of a stock id if existed then remove it.
         """
-        if not stock_id in self.metadata[type]:
+        if not isinstance(metadata_type, MetaDataType):
+            raise DataInfoTypeException(MetaDataType, type(metadata_type))
+        metadata_type = metadata_type.value
+        if not stock_id in self.metadata[metadata_type]:
             return None
-        record = self.metadata[type][stock_id].pop(0)
-        if len(self.metadata[type][stock_id]) == 0:
-            del self.metadata[type][stock_id]
+        record = self.metadata[metadata_type][stock_id].pop()
+        if len(self.metadata[metadata_type][stock_id]) == 0:
+            del self.metadata[metadata_type][stock_id]
         return record
 
 
@@ -142,38 +147,36 @@ class DataInfoHandler():
         - Dump data
         - If execption occur, remove dumped file.
         """
-        file_lock = FileLock("save_metadata", timeout=LOCKFILE_TIMEOUT)
-        try:
-            file_lock.acquire()
-            if os.path.isfile(self.__file):
-                self.log.verbose(f"File {self.__file} is existed. Backup it.")
-                try:
-                    old_file = f"{self.__file}.old"
-                    os.rename(self.__file, old_file)
-                    with open(self.__file, "w") as file:
-                        yaml.dump(self.metadata, file, default_flow_style=False, sort_keys=False)
-                    self.log.verbose(f"Done. Remove old file.")
-                    os.remove(old_file)
-                except Exception as ex:
-                    self.log.error(f"Exception occur: {ex}")
-                    os.remove(self.__file)
-                    os.rename(old_file, self.__file)
-                    raise ex
-            else:
-                self.log.verbose(f"File {self.__file} is not existed. Create new.")
-                try:
-                    with open(self.__file, "w") as file:
-                        yaml.dump(self.metadata, file, default_flow_style=False, sort_keys=False)
-                except Exception as ex:
-                    self.log.error(f"Exception occur: {ex}")
-                    os.remove(self.__file)
-                    raise ex
-        except FileLockException as ex:
-            self.log.warning(f"Waiting for release file timeout, create temp file")
-            with open(tempfile.NamedTemporaryFile(), "w") as file:
-                yaml.dump(self.metadata, file, default_flow_style=False, sort_keys=False)
-        finally:
-            file_lock.release()
+        with FileLock("save_metadata", timeout=LOCKFILE_TIMEOUT):
+            try:
+                self.__validate_metadata(self.metadata)
+                if os.path.isfile(self.__file):
+                    self.log.verbose(f"File {self.__file} is existed. Backup it.")
+                    try:
+                        old_file = f"{self.__file}.old"
+                        os.rename(self.__file, old_file)
+                        with open(self.__file, "w") as file:
+                            yaml.dump(self.metadata, file, default_flow_style=False, sort_keys=False)
+                        self.log.verbose(f"Done. Remove old file.")
+                        os.remove(old_file)
+                    except Exception as ex:
+                        self.log.error(f"Exception occur: {ex}")
+                        os.remove(self.__file)
+                        os.rename(old_file, self.__file)
+                        raise ex
+                else:
+                    self.log.verbose(f"File {self.__file} is not existed. Create new.")
+                    try:
+                        with open(self.__file, "w") as file:
+                            yaml.dump(self.metadata, file, default_flow_style=False, sort_keys=False)
+                    except Exception as ex:
+                        self.log.error(f"Exception occur: {ex}")
+                        os.remove(self.__file)
+                        raise ex
+            except FileLockException as ex:
+                self.log.warning(f"Waiting for release file timeout, create temp file")
+                with open(tempfile.NamedTemporaryFile(), "w") as file:
+                    yaml.dump(self.metadata, file, default_flow_style=False, sort_keys=False)
 
 
     def append_metadata(self, *, metadata_type:MetaDataType, stock_id:str, crawl_date:datetime,
@@ -237,7 +240,7 @@ class DataInfoHandler():
         }
 
 
-    def __is_valid_structure(self, data:dict) -> bool:
+    def __validate_metadata(self, data:dict) -> bool:
         if not isinstance(data, dict):
             raise DataInfoTypeException(dict, data)
         for data_type in MetaDataType:
@@ -247,17 +250,25 @@ class DataInfoHandler():
                 raise DataInfoTypeException(dict, data[data_type.value])
             if len(data[data_type.value]) == 0:
                 continue
-            for _, stock in data[data_type.value].items():
+            null_stock = []
+            for idx, stock in data[data_type.value].items():
                 if not isinstance(stock, list):
                     raise DataInfoTypeException(list, stock)
+                if len(stock) == 0:
+                    null_stock.append(idx)
+                    continue
                 for record in stock:
-                    self.__is_valid_record(record)
+                    self.__validate_record(record)
                     if not os.path.isfile(record[MetaDataKey.FILE_PATH.value]):
                         self.log.warning(f"File {record[MetaDataKey.FILE_PATH.value]} is not existed. Remove record.")
                         stock.remove(record)
+            if null_stock:
+                self.log.warning(f"Remove stock id with null: {', '.join(null_stock)}.")
+                for stock in null_stock:
+                    del data[data_type.value][stock]
 
 
-    def __is_valid_record(self, record:dict):
+    def __validate_record(self, record:dict):
         for key in MetaDataKey:
             if not key.value in record:
                 raise DataInfoHandlerException(f"Missing '{key}' in record.")

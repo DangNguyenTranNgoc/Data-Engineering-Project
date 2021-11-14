@@ -58,10 +58,11 @@ class FileLock(object):
             except OSError as e:
                 if e.errno != errno.EEXIST:
                     raise
-                if (time.time() - start_time) >= self.timeout:
+                wait_time = time.time() - start_time
+                if wait_time >= self.timeout:
                     raise FileLockException("Timeout occured.")
                 time.sleep(self.delay)
-                self.logger.verbose(f"Waiting for file unlocked {time.time() - start_time}s")
+                self.logger.verbose(f"Waiting for file unlocked {wait_time}(s)")
         self.is_locked = True
 
 

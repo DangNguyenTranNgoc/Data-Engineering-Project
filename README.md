@@ -3,7 +3,20 @@ Mini data pipeline for Data Engineering subject
 
 ## Functional
 
-### 🤖 Crawler
+### 💾 Repare 🔧
+
+The database using is PostgreSQL. The create database and table command is on file `create_table.sql` at `data` folder.
+
+The needed libraries info stored in file `requirement.txt`. Install it before start.
+
+Database info is stored in file `.env`. Change it for suitable with the current system.
+
+### 🤖 Crawler 🤖
+
+
+#### 🚀 Automation point for tool (like Airflow) 🚀
+
+Located in `dep.auto`. File `crawl_price.py` is ready for run with stock's id (i.e. fox, aaa, abc, ...) from user input.
 
 #### 💸 Crawl stock price 💸
 
@@ -13,11 +26,11 @@ It will gather all of the company's stock price data dating back to the first da
 
 Command `python -m dep.crawler.stock_price -i aaa`
 
-- Crawl from the latest date in DB to the latest date in website
+- Crawl from the date input to the latest date in website
 
-Example: In the DB, the latest day is 2021-10-20 and the latest date in website is 2021-11-20. It'll gather all the stock price data of the company from 2021-10-21 to 2021-11-20.
+Example: User input 2021-10-20 and the latest date in website is 2021-11-20. It'll gather all the stock price data of the company from 2021-10-21 to 2021-11-20.
 
-Command `python -m dep.crawler.stock_price -l -i aaa`
+Command `python -m dep.crawler.stock_price -i aaa --from-date 20-10-2021`
 
 For more infomation and usage, run `python -m dep.crawler.stock_price -h`
 
