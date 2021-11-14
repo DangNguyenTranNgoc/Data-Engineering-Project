@@ -9,7 +9,17 @@ The database using is PostgreSQL. The create database and table command is on fi
 
 The needed libraries info stored in file `requirement.txt`. Install it before start.
 
-Database info is stored in file `.env`. Change it for suitable with the current system.
+Database info is stored in file `.env`:
+
+```
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_NAME=data_enigneering
+DATABASE_USER=postgres
+DATABASE_PASSWORD=admin
+```
+
+Change it for suitable with the current system.
 
 ### 🤖 Crawler 🤖
 
