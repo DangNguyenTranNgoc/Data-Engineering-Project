@@ -21,7 +21,7 @@ PAGE_NUMBER_FILTER = r'(currentPage=)([\d]+)'
 CHARACTER_IGNORE = ['\n']
 PRICE_DF_HEADER = ["code", "date", "ref_price", "diff_price", "diff_price_rat",
                 "close_price", "vol", "open_price", "highest_price",
-                "lowest_price", "transaction", "foreign_buy", "foreign_sell"]
+                "lowest_price", "transactions", "foreign_buy", "foreign_sell"]
 MODULE_NAME = "dep.stock_crawler.price"
 
 
@@ -44,7 +44,7 @@ class StockPriceCrawler:
     def __init__(self, stock_id:str, base_url=BASE_URL):
         self.logger = logging.getLogger(MODULE_NAME)
         self.base_url = base_url
-        self.stock_id = stock_id
+        self.stock_id = stock_id.upper()
 
 
     def datetime_parser(self, date_str:str) -> datetime:

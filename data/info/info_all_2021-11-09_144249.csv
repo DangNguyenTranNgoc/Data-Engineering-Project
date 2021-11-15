@@ -1,4 +1,4 @@
-code,name,first_trade_date,first_vol,publish_price,current_vol,treasury_shares,publish_vol,foreign_owner,foreign_owner_ratio,foreign_vol_remain,current_price,market_capital,category,exchanges
+code,name,pub_date,first_vol,pub_price,curr_vol,treasury_shares,pub_vol,fr_owner,fr_owner_rat,fr_vol_remain,curr_price,market_capital,category,exchanges
 CRE,CTCP Bất động sản Thế Kỷ,05/09/2018,50000000.0,50.0,95999908.0,0.0,95999908.0,0.0,0.0,0.0,29.4,2817.6,bds,HOSE
 D2D,CTCP Phát triển Đô thị Công nghiệp số 2,14/08/2009,10700000.0,40.0,30214726.0,45016.0,30259742.0,5243000.0,17.32665136404666,3767560.0,64.1,1939.6,bds,HOSE
 DIG,Tổng Công ty cổ phần Đầu tư Phát triển Xây dựng,19/08/2009,60000000.0,55.0,409890962.0,0.0,409890962.0,113530461.0,27.697722449415707,40369588.0,58.0,23773.7,bds,HOSE

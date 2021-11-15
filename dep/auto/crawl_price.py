@@ -3,13 +3,11 @@
 """
 This fil for automation crawl stock price with id.
 """
-
 import os
 import time
 import pandas as pd
 from pathlib import Path
-from datetime import datetime, time
-from sqlalchemy import create_engine
+from datetime import date, datetime, time
 from dotenv import load_dotenv
 
 from dep.crawler.stock_price import StockPriceCrawler
@@ -31,6 +29,7 @@ PRICE_DATA_DIR = f"{DATA_DIR}{os.sep}stock"
 PRICE_DF_HEADER = ["stock_code", "date", "ref_price", "diff_price", "diff_price_rat",
                 "close_price", "vol", "open_price", "highest_price",
                 "lowest_price", "transaction", "foreign_buy", "foreign_sell"]
+STOCK_INFO_DATA_CSV = f"{DATA_DIR}{os.sep}info{os.sep}info_all_2021-11-09_144249.csv"
 dotenv_path = Path('.env')
 load_dotenv(dotenv_path=dotenv_path)
 DATABASE_HOST = os.getenv('DATABASE_HOST')
@@ -60,44 +59,74 @@ class CrawlPriceAutomation():
     Auto crawl price with info from metadata
     """
 
-    def __init__(self, stock_id:str) -> None:
+    def __init__(self, test_db=False) -> None:
         self.logger = get_logger(MODULE_NAME)
-        self.stock_id = stock_id
-        self.data_info = DataInfoHandler()
-        self.stock_crawler = StockPriceCrawler(stock_id)
+        self.database = Database(test_db)
 
-    
-    def get_latest_date(self):
+
+    def crawl_data(self, stock_id:str):
         """
-        Get the latest date on DB
+        Runner
         """
-        database = Database()
-        try:
-            query = (
-                f"SELECT date "
-                f"FROM stock_price "
-                f"WHERE code = '{self.stock_id}' "
-                f"ORDER BY date DESC LIMIT 1"
-            )
-            response = database.get_one(query)
-            self.logger.verbose(f"Database response: {response}")
-            if response is not None:
-                return datetime.combine(response[0], time.min)
-            return None
-        finally:
-            database.close_connect()
+        self.logger.info(f"Crawl stock of '{stock_id}'")
+        # Get latest date from DB
+        from_date = self.database.get_latest_date(stock_id)
+        crawler = StockPriceCrawler(stock_id)
+        data_info = DataInfoHandler()
+        # Crawl data
+        if from_date is not None:
+            data = crawler.crawl_from_date(from_date)
+        else:
+            # If stock id is not existed (new stock)
+            data = crawler.crawl_all()
+        # Save data to csv
+        str_time = '{0:%Y%m%d_%H%M%S}'.format(datetime.now())
+        file_name = f"{stock_id}_stock_price_{str_time}.csv"
+        crawler.export_to_csv(file_name=file_name, data=data, dest=PRICE_DATA_DIR)
+        # Save metadata
+        data_info.append_metadata(metadata_type=MetaDataType.STOCK_PRICE,
+                                crawl_date=datetime.now(),
+                                stock_id=stock_id,
+                                file_path=f"{PRICE_DATA_DIR}{os.sep}{file_name}",
+                                from_date=data[-1][1].date(),
+                                to_date=data[0][1].date(),
+                                record_number=len(data))
+        data_info.save_file()
     
 
-    def __insert_csv_to_database(self):
+    def crawl_all_stock_from_db(self):
+        """
+        Crawl all stock with stock id get from stock_info
+        """
+        self.logger.warning(f"Will crawl ALL stock price with company code get from database")
+        stock_list = self.database.get_all_code()
+        for stock in stock_list:
+            self.crawl_data(stock)
+
+
+    def insert_to_datbase(self):
         """
         Read metadata => Read csv file => Insert to database
         """
-        latest_date = self.get_latest_date()
-        while self.data_info.metadata[MetaDataType.STOCK_PRICE.value][self.stock_id]:
-            record = self.data_info.get_first_record(MetaDataType.STOCK_PRICE, self.stock_id)
+        self.logger.info(f"Begin insert CSV file to database. Files info get from metadata.yaml")
+        data_info = DataInfoHandler()
+        # Get list of key in case of dictionary changed size during iteration
+        id_list = list(data_info.metadata[MetaDataType.STOCK_PRICE.value].keys())
+        for stock in id_list:
+            self.__insert_to_database(data_info, stock)
+
+
+    def __insert_to_database(self, data_info:DataInfoHandler, stock_id:str):
+        if not isinstance(data_info, DataInfoHandler):
+            raise CrawlPriceAutomationException(f"Expected 'DataInfoHandler', recieve {type(data_info)}")
+        self.logger.info(f"Insert csv(s) of {stock_id.upper()}")
+        latest_date = self.database.get_latest_date(stock_id)
+        while data_info.metadata[MetaDataType.STOCK_PRICE.value][stock_id]:
+            record = data_info.get_first_record(MetaDataType.STOCK_PRICE, stock_id)
             if record is not None:
                 # Read csv file
                 data = pd.read_csv(record[MetaDataKey.FILE_PATH.value], index_col=False)
+                self.logger.info(f"Insert file '{record[MetaDataKey.FILE_PATH.value]}'...")
                 # Convert second column to datetime
                 data[PRICE_DF_HEADER[1]] = pd.to_datetime(data[PRICE_DF_HEADER[1]])
                 # Check the data read vs in file
@@ -107,40 +136,29 @@ class CrawlPriceAutomation():
                     )
                 if latest_date is not None:
                     data = self.__get_data_from_date(data, latest_date)
-                self.__insert_database(data)
+                self.database.insert_data(data, 'stock_price')
             # Remove the record when done
-            self.data_info.pop_record(MetaDataType.STOCK_PRICE, self.stock_id)
+            data_info.pop_record(MetaDataType.STOCK_PRICE, stock_id)
+        data_info.save_file()
 
 
-    def exec(self):
+    def insert_info(self):
         """
-        Runner
+        Insert stock info into database
         """
-        # Get latest date from DB
-        from_date = self.get_latest_date()
-        # Crawl data
-        if from_date is not None:
-            data = self.stock_crawler.crawl_from_date(from_date)
-        else:
-            # If stock id is not existed (new stock)
-            data = self.stock_crawler.crawl_all()
-        # Save data to csv
-        str_time = time.strftime(r"%Y-%m-%d_%H%M%S", time.gmtime())
-        file_name = f"{self.stock_id}_stock_price_{str_time}.csv"
-        self.stock_crawler.export_to_csv(file_name=file_name, data=data, dest=PRICE_DATA_DIR)
-        # Save metadata
-        self.data_info.append_metadata(metadata_type=MetaDataType.STOCK_PRICE,
-                                        crawl_date=datetime.now(),
-                                        stock_id=self.stock_id,
-                                        file_path=f"{PRICE_DATA_DIR}{os.sep}{file_name}",
-                                        from_date=data[-1][1].date(),
-                                        to_date=data[0][1].date(),
-                                        record_number=len(data))
-        self.data_info.save_file()
-        # Insert crawled data to database
-        self.__insert_csv_to_database()
-        self.data_info.save_file()
+        data = pd.read_csv(STOCK_INFO_DATA_CSV, index_col=False)
+        data['pub_date'] = pd.to_datetime(data['pub_date'])
+        self.database.insert_data(data, 'stock_info')
+        self.logger.info(f"Inserted {len(data.index)} new row(s)")
     
+
+    def test_call_class(self):
+        """
+        This function for Airflow testing
+        """
+        self.logger.info("Call successfull")
+        pass
+
 
     def __get_data_from_date(self, data:pd.DataFrame, from_date:datetime):
         if not isinstance(data, pd.DataFrame) or data.ndim != 2:
@@ -149,20 +167,11 @@ class CrawlPriceAutomation():
             raise CrawlPriceAutomationException(f"Invalid date")
         mask = data[PRICE_DF_HEADER[1]] > from_date
         return data.loc[mask]
-        
-
-    def __insert_database(self, data:pd.DataFrame):
-        if not isinstance(data, pd.DataFrame) or data.ndim != 2:
-            raise CrawlPriceAutomationException(f"Invalid data")
-        connect_string = (
-            f"postgresql://{DATABASE_USER}:{DATABASE_PASSWORD}@"
-            f"{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}"
-        )
-        engine = create_engine(connect_string)
-        data.to_sql(DATABASE_TABLE, engine, if_exists='append', index=False, index_label='id')
-        self.logger.info(f"Inserted {len(data.index)} new row(s)")
 
 
 start_logging()
-crawl_price_auto = CrawlPriceAutomation("fox")
-crawl_price_auto.exec()
+# crawl_price_auto = CrawlPriceAutomation()
+# crawl_price_auto.insert_info()
+
+crawl_price_auto = CrawlPriceAutomation()
+crawl_price_auto.crawl_all_stock_from_db()

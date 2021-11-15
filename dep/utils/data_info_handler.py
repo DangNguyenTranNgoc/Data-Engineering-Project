@@ -130,8 +130,6 @@ class DataInfoHandler():
         if not stock_id in self.metadata[metadata_type]:
             return None
         record = self.metadata[metadata_type][stock_id].pop()
-        if len(self.metadata[metadata_type][stock_id]) == 0:
-            del self.metadata[metadata_type][stock_id]
         return record
 
 
