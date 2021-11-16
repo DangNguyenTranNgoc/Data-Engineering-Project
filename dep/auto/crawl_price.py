@@ -4,16 +4,12 @@
 This fil for automation crawl stock price with id.
 """
 import os
-import time
 import pandas as pd
-from pathlib import Path
-from datetime import date, datetime, time
-from dotenv import load_dotenv
+from datetime import datetime
 
 from dep.crawler.stock_price import StockPriceCrawler
 from dep.utils.logging_utils import (
     get_logger,
-    start_logging,
 )
 from dep.utils.data_info_handler import (
     DataInfoHandler,
@@ -30,13 +26,6 @@ PRICE_DF_HEADER = ["stock_code", "date", "ref_price", "diff_price", "diff_price_
                 "close_price", "vol", "open_price", "highest_price",
                 "lowest_price", "transaction", "foreign_buy", "foreign_sell"]
 STOCK_INFO_DATA_CSV = f"{DATA_DIR}{os.sep}info{os.sep}info_all_2021-11-09_144249.csv"
-dotenv_path = Path('.env')
-load_dotenv(dotenv_path=dotenv_path)
-DATABASE_HOST = os.getenv('DATABASE_HOST')
-DATABASE_PORT = os.getenv('DATABASE_PORT')
-DATABASE_NAME = os.getenv('DATABASE_NAME')
-DATABASE_USER = os.getenv('DATABASE_USER')
-DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD')
 DATABASE_TABLE = "stock_price"
 MODULE_NAME = "dep.utils.data_info_handler"
 
@@ -150,14 +139,6 @@ class CrawlPriceAutomation():
         data['pub_date'] = pd.to_datetime(data['pub_date'])
         self.database.insert_data(data, 'stock_info')
         self.logger.info(f"Inserted {len(data.index)} new row(s)")
-    
-
-    def test_call_class(self):
-        """
-        This function for Airflow testing
-        """
-        self.logger.info("Call successfull")
-        pass
 
 
     def __get_data_from_date(self, data:pd.DataFrame, from_date:datetime):
@@ -167,11 +148,3 @@ class CrawlPriceAutomation():
             raise CrawlPriceAutomationException(f"Invalid date")
         mask = data[PRICE_DF_HEADER[1]] > from_date
         return data.loc[mask]
-
-
-start_logging()
-# crawl_price_auto = CrawlPriceAutomation()
-# crawl_price_auto.insert_info()
-
-crawl_price_auto = CrawlPriceAutomation()
-crawl_price_auto.crawl_all_stock_from_db()

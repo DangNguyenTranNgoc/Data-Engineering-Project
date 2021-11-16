@@ -10,7 +10,7 @@ args = {
 }
 
 with DAG(
-    dag_id='dep_crawl_stock',
+    dag_id='dep_insert_stock_data',
     default_args=args,
     schedule_interval=None,
     start_date=days_ago(2),
@@ -18,11 +18,12 @@ with DAG(
 ) as dag:
 
 
-    def crawl_stock():
+    def insert_stock_data():
         """
-        Crawl stock with stock code get from database
+        Insert crawled csv to database
         """
         crawl_price_auto = CrawlPriceAutomation()
+        
         # Get enviroment variable
         host = Variable.get("DATABASE_HOST")
         port = Variable.get("DATABASE_PORT")
@@ -30,14 +31,17 @@ with DAG(
         user = Variable.get("DATABASE_USER")
         password = Variable.get("DATABASE_PASSWORD")
         crawl_price_auto.database.set_param_from_airflow(host, port, database_name, user, password)
+        
         # Create tabel if needed
         # crawl_price_auto.database.init_database()
-        crawl_price_auto.crawl_all_stock_from_db()
+
+        # Insert data to database
+        crawl_price_auto.insert_to_datbase()
 
 
     run_this = PythonOperator(
-        task_id='crawl_stock',
-        python_callable=crawl_stock,
+        task_id='insert_stock_data',
+        python_callable=insert_stock_data,
     )
 
 

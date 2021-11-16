@@ -13,11 +13,11 @@ DATA_DIR = f"data"
 MODULE_NAME = "dep.utils.database"
 dotenv_path = Path('.env')
 load_dotenv(dotenv_path=dotenv_path)
-DATABASE_HOST = os.getenv('DATABASE_HOST')
-DATABASE_PORT = os.getenv('DATABASE_PORT')
-DATABASE_NAME = os.getenv('DATABASE_NAME')
-DATABASE_USER = os.getenv('DATABASE_USER')
-DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD')
+DATABASE_HOST = os.getenv("DATABASE_HOST", "localhost")
+DATABASE_PORT = os.getenv("DATABASE_PORT", 5432)
+DATABASE_NAME = os.getenv("DATABASE_NAME", "data_engineering")
+DATABASE_USER = os.getenv("DATABASE_USER", "postgres")
+DATABASE_PASSWORD = os.getenv("DATABASE_PASSWORD", "admin")
 DATA_PATH = f"data{os.sep}stock.db"
 
 
@@ -90,7 +90,7 @@ class Database():
         """
         Get all stock's codes
         """
-        query = r"SELECT DISTINCT code FROM stock_info"
+        query = r"SELECT DISTINCT code FROM stock_info ORDER BY code"
         self.logger.verbose(f"Excute query: {query}")
         data = pd.read_sql_query(query, self.engine)
         if not data.empty:
@@ -110,7 +110,15 @@ class Database():
                 with self.engine.connect() as conn:
                     self.logger.verbose(f"Excute query: {query}")
                     conn.execute(query)
-    
+
+
+    def set_param_from_airflow(self, host, port, database_name, user, password):
+        """
+        Get variable and set to database
+        """
+        connect_string = f"postgresql://{user}:{password}@{host}:{port}/{database_name}"
+        self.engine = create_engine(connect_string)
+        
     
     def __prepare_engine(self):
         if self.db_type:

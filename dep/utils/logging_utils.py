@@ -6,7 +6,7 @@ import os
 import time
 import inspect
 import yaml
-from . import console_color
+from dep.utils import console_color
 
 LOG_DIR = f"log"
 global VERBOSE
