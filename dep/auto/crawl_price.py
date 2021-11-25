@@ -27,7 +27,7 @@ PRICE_DF_HEADER = ["stock_code", "date", "ref_price", "diff_price", "diff_price_
                 "lowest_price", "transaction", "foreign_buy", "foreign_sell"]
 STOCK_INFO_DATA_CSV = f"{DATA_DIR}{os.sep}info{os.sep}info_all_2021-11-09_144249.csv"
 DATABASE_TABLE = "stock_price"
-MODULE_NAME = "dep.utils.data_info_handler"
+MODULE_NAME = "dep.auto.crawl_price_auto"
 
 
 class CrawlPriceAutomationException(Exception):

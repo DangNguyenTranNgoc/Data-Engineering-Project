@@ -199,7 +199,7 @@ def argument_parser():
                         dest='category_name', required=False, help='The name of category')
     parser.add_argument("-e", "--exchanges", action='store', type=str,
                         dest='exchanges_name', required=False, help='The exchanges name')
-    parser.add_argument("-a", "--all", action='store_true', default=False,
+    parser.add_argument("-a", "--all", action='store_true', default=True,
                         dest='crawl_all', required=False, help='Crawl all info')
     parser.add_argument("-o", "--output", action='store', choices=['csv', 'db'], default='csv',
                         nargs='?', dest='output', required=False, help='export to CSV or DB')
@@ -265,4 +265,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    logger = get_logger(MODULE_NAME)
+    start_logging()
+    #main()
+    stock_info_crawler = StockInfoCrawler(logger)
+    info_list = stock_info_crawler.crawl_all()
+    print(info_list)

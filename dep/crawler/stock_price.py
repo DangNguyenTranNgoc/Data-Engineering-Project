@@ -314,7 +314,7 @@ def main():
     logger = get_logger(MODULE_NAME)
     start_logging()
     stock_id = args.stock_id.strip()
-    stock_price_crawler = StockPriceCrawler(logger, stock_id)
+    stock_price_crawler = StockPriceCrawler(stock_id)
     try:
         if args.from_date:
             data = stock_price_crawler.crawl_from_date(from_date=args.from_date)

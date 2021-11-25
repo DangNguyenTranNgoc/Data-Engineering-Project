@@ -1,2 +1,15 @@
 stock-info: {}
-stock-price: {}
+stock-price: 
+  FOX:
+  - date: 2021-11-20 07:29:38.243740
+    from-date: 2017-01-13
+    to-date: 2021-11-19
+    file-path: data\stock\FOX_stock_price.csv
+    record-number: 1214
+  VTP:
+  - date: 2021-11-20 07:29:39.243740
+    from-date: 2018-11-23
+    to-date: 2021-11-19
+    file-path: data\stock\VTP_stock_price.csv
+    record-number: 748
+  
